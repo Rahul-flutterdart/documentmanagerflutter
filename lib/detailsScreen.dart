@@ -258,7 +258,6 @@ class _DetailsScreenState extends State<DetailsScreen> {
                           ],
                         ),
 
-                        // Display duration and current playback position
                         if (_audioDuration != Duration.zero) ...[
                           Padding(
                             padding: const EdgeInsets.symmetric(vertical: 8.0),

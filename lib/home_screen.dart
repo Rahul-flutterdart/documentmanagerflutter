@@ -24,14 +24,14 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  // Format date to a readable string
+
   String _formatDate(String? date) {
     if (date == null || date.isEmpty) return 'No Expiry Date';
     DateTime parsedDate = DateTime.parse(date);
     return DateFormat.yMMMd().format(parsedDate);
   }
 
-  // Determine document type icon
+
   IconData _getDocumentIcon(String fileType) {
     switch (fileType) {
       case 'pdf':
@@ -49,7 +49,7 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  // Check if document has an expiry date and it's expired
+
   bool _isExpired(String? expiryDate) {
     if (expiryDate == null || expiryDate.isEmpty) return false;
     DateTime expiry = DateTime.parse(expiryDate);
@@ -62,7 +62,13 @@ class _HomeScreenState extends State<HomeScreen> {
       appBar: AppBar(
         title: Text('Document Manager'),
         backgroundColor: Colors.deepPurple,
-        elevation: 4.0,
+        elevation: 6.0,
+        actions: [
+          IconButton(
+            icon: Icon(Icons.refresh),
+            onPressed: _refreshDocuments,
+          ),
+        ],
       ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: documents,
@@ -93,10 +99,10 @@ class _HomeScreenState extends State<HomeScreen> {
               final doc = docs[index];
               final isExpired = _isExpired(doc['expiry_date']);
               return Card(
-                elevation: 5.0,
+                elevation: 8.0,
                 margin: EdgeInsets.symmetric(vertical: 8.0),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(10.0),
+                  borderRadius: BorderRadius.circular(12.0),
                 ),
                 child: ListTile(
                   contentPadding: EdgeInsets.all(16.0),
@@ -118,7 +124,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       ),
                       SizedBox(height: 4.0),
                       Text(
-                        'Created On: ${_formatDate(doc['expiry_date'])}',
+                        'Created On: ${_formatDate(doc['created_on'])}',
                         style: TextStyle(
                           color: isExpired ? Colors.red : Colors.green,
                           fontWeight: FontWeight.bold,
@@ -148,7 +154,7 @@ class _HomeScreenState extends State<HomeScreen> {
           );
         },
       ),
-      floatingActionButton: FloatingActionButton(
+      floatingActionButton: FloatingActionButton.extended(
         onPressed: () {
           Navigator.push(
             context,
@@ -157,7 +163,8 @@ class _HomeScreenState extends State<HomeScreen> {
             ),
           );
         },
-        child: Icon(Icons.add),
+        label: Text('Add Document'),
+        icon: Icon(Icons.add),
         backgroundColor: Colors.deepPurple,
       ),
     );

@@ -1,15 +1,13 @@
+import 'dart:async';
 import 'dart:io';
-import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:file_picker/file_picker.dart';
-import 'package:open_file/open_file.dart';
 import 'package:video_player/video_player.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:permission_handler/permission_handler.dart';
-import 'package:flutter_sound/flutter_sound.dart';  // For recording
-import 'package:audioplayers/audioplayers.dart';    // For playback
-
+import 'package:flutter_sound/flutter_sound.dart' as fs;
+import 'package:audioplayers/audioplayers.dart' as ap;
 import 'offline_data/database_helper.dart';
 import 'offline_data/model_class.dart';
 
@@ -31,15 +29,25 @@ class _AddScreenState extends State<AddScreen> {
   String _attachmentType = '';
   String? _audioPath;
   bool _isRecording = false;
-
-  FlutterSoundRecorder? _audioRecorder; // Audio recorder object
-  final AudioPlayer _audioPlayer = AudioPlayer(); // Audio player object
+  bool _isPlaying = false;
+  DateTime? _expiryDate;
+  fs.FlutterSoundRecorder? _audioRecorder;
+  final ap.AudioPlayer _audioPlayer = ap.AudioPlayer();
+  Duration _recordingDuration = Duration.zero;
+  late StreamSubscription _recordingSubscription;
 
   @override
   void initState() {
     super.initState();
-    _audioRecorder = FlutterSoundRecorder();
+    _audioRecorder = fs.FlutterSoundRecorder();
     _checkPermissions();
+    _audioPlayer.onPlayerStateChanged.listen((state) {
+      if (state == ap.PlayerState.completed) {
+        setState(() {
+          _isPlaying = false;
+        });
+      }
+    });
   }
 
   @override
@@ -47,6 +55,7 @@ class _AddScreenState extends State<AddScreen> {
     _videoController?.dispose();
     _audioRecorder?.closeRecorder();
     _audioPlayer.dispose();
+    _recordingSubscription.cancel();
     super.dispose();
   }
 
@@ -63,9 +72,29 @@ class _AddScreenState extends State<AddScreen> {
       await _audioRecorder!.openRecorder();
       await _audioRecorder!.startRecorder(toFile: _audioPath);
 
+      _recordingSubscription = _audioRecorder!.onProgress!.listen((event) {
+        setState(() {
+          _recordingDuration = event.duration;
+        });
+      });
+
       setState(() {
         _isRecording = true;
       });
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Recording Started'),
+          content: Text('Audio recording has started.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
       print('Error starting recording: $e');
     }
@@ -75,10 +104,26 @@ class _AddScreenState extends State<AddScreen> {
     try {
       await _audioRecorder!.stopRecorder();
       await _audioRecorder!.closeRecorder();
+      _recordingSubscription.cancel();
 
       setState(() {
         _isRecording = false;
+        _recordingDuration = Duration.zero;
       });
+
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: Text('Recording Stopped'),
+          content: Text('Audio recording has stopped.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(context).pop(),
+              child: Text('OK'),
+            ),
+          ],
+        ),
+      );
     } catch (e) {
       print('Error stopping recording: $e');
     }
@@ -87,68 +132,34 @@ class _AddScreenState extends State<AddScreen> {
   Future<void> _recordAudio() async {
     try {
       if (_isRecording) {
-        // Stop recording
         await _stopRecording();
-        setState(() {
-          _isRecording = false;
-        });
-        print('Audio recording stopped. Saved to: $_audioPath');
+        print('Audio recording stopped. Saved to crazzyyy rahul: $_audioPath');
       } else {
-        // Start recording
+        if (_attachmentType.isNotEmpty) {
+          setState(() {
+            _clearAttachment();
+          });
+        }
         await _startRecording();
-        setState(() {
-          _isRecording = true;
-          _attachmentType = 'Audio';
-        });
-        print('Audio recording started. Saving to: $_audioPath');
+        print('Audio recording started. Saving to  crazzyy rahul: $_audioPath');
       }
     } catch (e) {
       print('Error recording audio: $e');
     }
   }
 
-  // Future<void> _startRecording() async {
-  //   try {
-  //     final tempDir = await getTemporaryDirectory();
-  //     _audioPath = '${tempDir.path}/audio_${DateTime.now().millisecondsSinceEpoch}.aac';
-  //
-  //     await _audioRecorder!.openRecorder();
-  //     await _audioRecorder!.startRecorder(toFile: _audioPath);
-  //
-  //     setState(() {
-  //       _isRecording = true;
-  //     });
-  //   } catch (e) {
-  //     print('Error starting recording: $e');
-  //   }
-  // }
-  //
-  // Future<void> _stopRecording() async {
-  //   try {
-  //     await _audioRecorder!.stopRecorder();
-  //     await _audioRecorder!.closeRecorder();
-  //
-  //     setState(() {
-  //       _isRecording = false;
-  //     });
-  //
-  //     if (_audioPath != null && File(_audioPath!).existsSync()) {
-  //       print('Recording stopped, file exists at: $_audioPath');
-  //     } else {
-  //       print('Recording stopped, but no file found at: $_audioPath');
-  //     }
-  //   } catch (e) {
-  //     print('Error stopping recording: $e');
-  //   }
-  // }
-
-
-
   Future<void> _playAudio() async {
     if (_audioPath != null && File(_audioPath!).existsSync()) {
       try {
-        await _audioPlayer.play(DeviceFileSource(_audioPath!));
-        print('Playing audio from: $_audioPath');
+        if (_isPlaying) {
+          await _audioPlayer.pause();
+        } else {
+          await _audioPlayer.play(ap.DeviceFileSource(_audioPath!));
+        }
+        setState(() {
+          _isPlaying = !_isPlaying;
+        });
+        print('Playing audio from crazzyy rahul: $_audioPath');
       } catch (e) {
         print('Error playing audio: $e');
         ScaffoldMessenger.of(context).showSnackBar(
@@ -170,6 +181,11 @@ class _AddScreenState extends State<AddScreen> {
     );
 
     if (result != null && result.files.isNotEmpty) {
+      if (_attachmentType.isNotEmpty) {
+        setState(() {
+          _clearAttachment();
+        });
+      }
       setState(() {
         _file = result.files.first;
         _attachmentType = _getFileType(_file!.extension!);
@@ -185,6 +201,11 @@ class _AddScreenState extends State<AddScreen> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickImage(source: ImageSource.camera);
     if (pickedFile != null) {
+      if (_attachmentType.isNotEmpty) {
+        setState(() {
+          _clearAttachment();
+        });
+      }
       setState(() {
         _image = pickedFile;
         _attachmentType = 'Image';
@@ -196,6 +217,11 @@ class _AddScreenState extends State<AddScreen> {
     final picker = ImagePicker();
     final pickedFile = await picker.pickVideo(source: ImageSource.camera);
     if (pickedFile != null) {
+      if (_attachmentType.isNotEmpty) {
+        setState(() {
+          _clearAttachment();
+        });
+      }
       setState(() {
         _videoController = VideoPlayerController.file(File(pickedFile.path))
           ..initialize().then((_) {
@@ -204,6 +230,15 @@ class _AddScreenState extends State<AddScreen> {
         _attachmentType = 'Video';
       });
     }
+  }
+
+  void _clearAttachment() {
+    _image = null;
+    _file = null;
+    _videoController?.dispose();
+    _videoController = null;
+    _audioPath = null;
+    _attachmentType = '';
   }
 
   String _getFileType(String extension) {
@@ -241,7 +276,8 @@ class _AddScreenState extends State<AddScreen> {
       description: description,
       fileType: _attachmentType,
       filePath: _getFilePath()!,
-      expiryDate: DateTime.now(),
+      createdOn: DateTime.now(),
+      expiryDate: _expiryDate,
     );
 
     await DatabaseHelper.instance.insertDocument(newDocument);
@@ -257,35 +293,43 @@ class _AddScreenState extends State<AddScreen> {
     } else if (_videoController != null && _videoController!.value.isInitialized) {
       return _videoController!.dataSource;
     } else if (_audioPath != null) {
-      return _audioPath;  // Return the audio path if available
+      return _audioPath;
     }
     return null;
   }
 
+  Future<void> _selectExpiryDate() async {
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: _expiryDate ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2101),
+    );
+    if (pickedDate != null && pickedDate != _expiryDate) {
+      setState(() {
+        _expiryDate = pickedDate;
+      });
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       appBar: AppBar(
         title: Text('Add Document'),
-        actions: [
-          IconButton(
-            icon: Icon(Icons.save),
-            onPressed: _saveDocument,
-          ),
-        ],
       ),
       body: Padding(
-        padding: const EdgeInsets.all(16.0),
+        padding: EdgeInsets.all(16.0),
         child: SingleChildScrollView(
           child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
+            crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
               TextFormField(
                 controller: _titleController,
                 decoration: InputDecoration(
                   labelText: 'Title',
                   border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.title),
                 ),
               ),
               SizedBox(height: 16.0),
@@ -294,124 +338,145 @@ class _AddScreenState extends State<AddScreen> {
                 decoration: InputDecoration(
                   labelText: 'Description',
                   border: OutlineInputBorder(),
+                  prefixIcon: Icon(Icons.description),
                 ),
               ),
               SizedBox(height: 16.0),
+
+              // Expiry Date
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Expanded(
+                    child: Text(
+                      'Expiry Date: ${_expiryDate != null ? '${_expiryDate!.toLocal().toString().split(' ')[0]}' : 'None'}',
+                      style: TextStyle(fontWeight: FontWeight.bold),
+                    ),
+                  ),
+                  ElevatedButton.icon(
+                    onPressed: _selectExpiryDate,
+                    icon: Icon(Icons.calendar_today),
+                    label: Text('Select Date'),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.blueAccent,
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 16.0),
+
               Text(
                 'Attach a document:',
                 style: TextStyle(fontWeight: FontWeight.bold),
               ),
               SizedBox(height: 16.0),
-              Row(
+              Wrap(
+                spacing: 16.0,
+                runSpacing: 16.0,
                 children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _selectFile,
-                      icon: Icon(Icons.attach_file),
-                      label: Text('Attach File'),
+                  ElevatedButton.icon(
+                    onPressed: _selectFile,
+                    icon: Icon(Icons.attach_file),
+                    label: Text('Attach File'),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.deepPurple,
                     ),
                   ),
-                  SizedBox(width: 16.0),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _captureImage,
-                      icon: Icon(Icons.camera_alt),
-                      label: Text('Capture Image'),
+                  ElevatedButton.icon(
+                    onPressed: _captureImage,
+                    icon: Icon(Icons.camera_alt),
+                    label: Text('Capture Image'),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.deepPurple,
                     ),
                   ),
-                ],
-              ),
-              SizedBox(height: 16.0),
-              Row(
-                children: [
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _recordVideo,
-                      icon: Icon(Icons.videocam),
-                      label: Text('Record Video'),
+                  ElevatedButton.icon(
+                    onPressed: _recordVideo,
+                    icon: Icon(Icons.videocam),
+                    label: Text('Record Video'),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.deepPurple,
                     ),
                   ),
-                  SizedBox(width: 16.0),
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: _recordAudio,
-                      icon: Icon(_isRecording ? Icons.stop : Icons.mic),
-                      label: Text(_isRecording ? 'Stop Recording' : 'Record Audio'),
+                  ElevatedButton.icon(
+                    onPressed: _recordAudio,
+                    icon: Icon(_isRecording ? Icons.stop : Icons.mic),
+                    label: Text(_isRecording ? 'Stop Recording' : 'Record Audio'),
+                    style: ElevatedButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.deepPurple,
                     ),
                   ),
                 ],
               ),
               SizedBox(height: 16.0),
 
-              // Display Recording Indicator
               if (_isRecording)
-                Padding(
-                  padding: const EdgeInsets.symmetric(vertical: 8.0),
-                  child: Text(
-                    'Recording...',
-                    style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold),
-                  ),
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      'Recording.....in progress',
+                      style: TextStyle(color: Colors.red),
+                    ),
+                    SizedBox(height: 8.0),
+                  ],
                 ),
 
-              // Show attached image
-              if (_attachmentType == 'Image' && _image != null)
-                Image.file(File(_image!.path), height: 200, fit: BoxFit.cover),
 
-              // Show attached video
-              if (_attachmentType == 'Video' && _videoController != null)
-                _videoController!.value.isInitialized
-                    ? AspectRatio(
+              if (_image != null) ...[
+                SizedBox(height: 16.0),
+                Text('Image Preview:'),
+                SizedBox(height: 8.0),
+                Image.file(File(_image!.path), height: 200, fit: BoxFit.cover),
+              ],
+
+              // Display PDF or File Info
+              if (_file != null && _file!.extension == 'pdf') ...[
+                SizedBox(height: 16.0),
+                Text('PDF Attached: ${_file!.name}'),
+              ] else if (_file != null) ...[
+                SizedBox(height: 16.0),
+                Text('File Attached: ${_file!.name}'),
+              ],
+
+              if (_audioPath != null) ...[
+                ElevatedButton(
+                  onPressed: _playAudio,
+                  child: Text(_isPlaying ?  'Pause Audio':'Play Audio'),
+                  style: ElevatedButton.styleFrom(
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.blueAccent,
+                  ),
+                ),
+              ],
+              if (_videoController != null && _videoController!.value.isInitialized)
+                AspectRatio(
                   aspectRatio: _videoController!.value.aspectRatio,
                   child: VideoPlayer(_videoController!),
-                )
-                    : CircularProgressIndicator(),
-
-              // Show attached file (PDF/Excel)
-              if (_attachmentType == 'PDF' || _attachmentType == 'Excel')
-                Column(
-                  children: [
-                    Text('Attached file: ${_file!.name}'),
-                    SizedBox(height: 8.0),
-                    ElevatedButton.icon(
-                      onPressed: () {
-                        OpenFile.open(_file!.path);
-                      },
-                      icon: Icon(Icons.picture_as_pdf),
-                      label: Text('View File'),
-                    ),
-                  ],
                 ),
-
-              // Show recorded audio
-              if (_audioPath != null)
-                Column(
-                  children: [
-                    Text('Recorded Audio:'),
-                    ElevatedButton.icon(
-                      onPressed: _playAudio,
-                      icon: Icon(Icons.play_arrow),
-                      label: Text('Play Audio'),
-                    ),
-                  ],
-                ),
-
-              SizedBox(height: 16.0),
+              SizedBox(height: 24.0),
               Center(
-                child: ElevatedButton.icon(
+                child: ElevatedButton(
                   onPressed: _saveDocument,
-                  icon: Icon(Icons.save),
-                  label: Text('Save Document'),
+                  child: Text('Save Document'),
                   style: ElevatedButton.styleFrom(
-                    minimumSize: Size(double.infinity, 50),
-                    padding: EdgeInsets.symmetric(vertical: 16.0),
+                    foregroundColor: Colors.white,
+                    backgroundColor: Colors.deepPurple,
+                    padding: EdgeInsets.symmetric(horizontal: 100, vertical: 20),
+                    textStyle: TextStyle(fontSize: 18),
                   ),
                 ),
               ),
+              SizedBox(height: 32.0),
             ],
           ),
         ),
       ),
     );
   }
-
 }
